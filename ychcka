@@ -1,0 +1,230 @@
+
+:- use_module(library(socket)).
+
+:- dynamic exit/1.
+:- dynamic hello/1.
+:- dynamic players/1.
+:- dynamic item/1.
+
+
+e(north) --> [north].
+e(south) --> [south].
+e(west) --> [west].
+e(east) --> [east].
+
+i(sword) --> [sword].
+i(keys) --> [keys].
+i(detector) --> [detector].
+i(bunny) --> [bunny].
+i(turtle) --> [turtle].
+
+hello --> [what],[is],[your],[name],['?'].
+enter -->['>'].
+player -->['name'].
+exits([Exit]) --> e(Exit).
+exits([Exit|Exits]) --> e(Exit), exits(Exits).
+parse_exits(Exits) --> [exits], exits(Exits), ['.'].
+
+% parse(Tokens) :- phrase(parse_exits(Exits), Tokens, Rest), retractall(exit(_)), assert(exit(Exits)).
+parse(Tokens) :-
+  append(Tokens,['.'],Tokens_2),
+  phrase(parse_exits(Exits), Tokens_2, Rest),
+  retractall(exit(_)),
+  assert(exit(Exits)).
+parse(_).
+
+items([Item]) --> i(Item).
+items([Item|Items]) --> i(Item), items(Items).
+
+parse_items(Items) --> [items], items(Items), ['.'].
+parse_2(Tokens) :-
+  append(Tokens,['.'],Tokens_2),
+  phrase(parse_items(Items), Tokens_2, Rest),
+  retractall(item(_)),
+  assert(item(Items)).
+parse_2(_).
+
+/* Convert to lower case if necessary,
+skips some characters,
+works with non latin characters in SWI Prolog. */
+filter_codes([], []).
+filter_codes([H|T1], T2) :-
+  char_code(C, H),
+  member(C, ['(', ')', ':']),
+  filter_codes(T1, T2).
+filter_codes([H|T1], [F|T2]) :- 
+  code_type(F, to_lower(H)),
+  filter_codes(T1, T2).
+
+
+process(Stream) :-
+  %exit([_,Direction]),
+  %exit([Direction|_]),
+  exit(Directions), write('All directions: '), write(Directions),
+  write('\n'),
+  random_member(Direction, Directions),
+  write('Current direction: '), write(Direction), write('\n'),
+  format(atom(Command), 'move ~w~n', [Direction]),
+  write('Command: '), write(Command), write('\n'),
+  write(Stream, Command),
+  flush_output(Stream),
+  retractall(exit(_)),
+  read_loop(Stream).
+process(_).
+
+process_2(Stream) :-
+  %exit([_,Direction]),
+  item([Kind|_]),
+  item(Kinds), write('All items: '), write(Kinds),
+  write('\n'),
+  write('Current kind: '),write(Kind),write('\n'),
+  format(atom(Command), 'grab ~w~n', [Kind]),
+  write('Command: '),write(Command),write('\n'),
+  write(Stream, Command),
+  flush_output(Stream),
+  retractall(item(_)),
+  read_loop(Stream).
+process_2(_).
+
+hard_level('very hard', 1).
+hard_level('hard', 2).
+hard_level('normal', 5).
+hard_level('easy', 10).
+hard_level(_AnyCase, 5).
+
+parse_hello(Stream) :-
+  %format(atom(Command), '~n', []),
+  write(Stream), nl,
+  read_line_to_codes(Stream, Codes),
+  write(Stream), write(Codes), nl,
+  filter_codes(Codes, Filtered),
+  write(Filtered), nl,
+  atom_codes(Atom, Filtered),
+  write(Atom), nl,
+  tokenize_atom(Atom, Tokens),
+  write(Tokens),
+  phrase(hello, Tokens, _), assert(hello('Bot')),
+
+  format(atom(Command), 'Bot~n', []),
+  write(Stream, Command),
+  write(Command),
+  flush_output(Stream).
+
+begining(Stream) :-
+  sleep(3),
+  say(Stream, 'How dare you come to me?'),
+  read_loop(Stream),
+
+  sleep(3),
+  say(Stream, 'I hear your hearts beating'),
+  read_loop(Stream),
+
+  sleep(3),
+  say(Stream, 'I\'m gonna find you all...'),
+  read_loop(Stream).
+
+grab(Stream) :-
+  format(atom(Command), 'grab sword~n', []),
+  write('Command: '), write(Command), write('\n'),
+  write(Stream, Command),
+  flush_output(Stream).
+
+kill(Stream, Player) :-
+  format(atom(Command), 'kill ~w~n', [Player]),
+  write('Command: '), write(Command), write('\n'),
+  write(Stream, Command),
+  flush_output(Stream).
+
+players_comm(Stream) :-
+  format(atom(Command), 'players~n', []),
+  write('Command: '), write(Command), write('\n'),
+  write(Stream, Command),
+  flush_output(Stream).
+
+stats(Stream) :-
+  format(atom(Command), 'stats~n', []),
+  write('Command: '), write(Command), write('\n'),
+  write(Stream, Command),
+  flush_output(Stream).
+
+look(Stream) :-
+  format(atom(Command), 'look~n', []),
+  write('Command: '), write(Command), write('\n'),
+  write(Stream, Command),
+  flush_output(Stream).
+
+say(Stream, Text) :-
+  format(atom(Command), 'say ~s~n', [Text]),
+  write('Command: '), write(Command), write('\n'),
+  write(Stream, Command),
+  flush_output(Stream).
+
+read_stream(Stream, Tokens) :-
+  read_line_to_codes(Stream, Codes),
+  filter_codes(Codes, Filtered),
+  atom_codes(Atom, Filtered),atom_codes(Atom, Filtered),
+  tokenize_atom(Atom, Tokens),
+  write(Tokens),
+  parse(Tokens),
+  parse_2(Tokens),
+  phrase_players(Tokens),
+  nl,
+  flush().
+
+first_element([First|_], [First]).
+phrase_players(Tokens) :-
+  first_element(Tokens, First),
+  phrase(player, First, _),
+  last(Tokens, Last_el),
+  retractall(players(_)),
+  assert(players([Last_el])).
+phrase_players(_).
+
+read_loop(Stream) :-
+  read_stream(Stream, Tokens),
+  phrase(enter, Tokens, _),!;
+  read_loop(Stream).
+
+move_loop(Stream, 0, Time_local).
+move_loop(Stream, Count, Time_local) :-
+  Count > 0,
+  sleep(Time_local),
+  process(Stream),
+  S is Count - 1, 
+  move_loop(Stream, S, Time_local).
+
+command_in_room(Stream, Time) :-
+  
+  /*sleep(3),
+  process_2(Stream),
+
+  sleep(3),
+  players_comm(Stream),
+  read_loop(Stream),
+
+  sleep(3),
+  grab(Stream),
+  read_loop(Stream),*/
+
+  move_loop(Stream, 1, Time),
+  
+  look(Stream).
+  /*
+  sleep(3),
+  stats(Stream).*/
+
+
+loop(Stream, Time) :-
+  read_loop(Stream),
+  command_in_room(Stream, Time),
+  loop(Stream, Time).
+ 
+ main(Level) :-
+   setup_call_cleanup(
+     tcp_connect(localhost:3333, Stream, []),
+    (parse_hello(Stream),
+     begining(Stream),
+     hard_level(Level, Time),
+     loop(Stream, Time)),
+     close(Stream)).
+     
